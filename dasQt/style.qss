@@ -1,0 +1,49 @@
+
+
+QPushButton#button1 {
+    /* background-color: #e44534; */
+    /* color: white; */
+    border-style: solid;
+    border-width: 2px;
+    border-color: #1E90FF;
+    border-radius: 10px;
+    font-family: Arial;
+    font-size: 14px;
+    text-align: center;
+    padding: 8px;
+    /* box-shadow: 4px 4px 5px rgba(0, 0, 0, 0.2); */
+}
+QPushButton#button1:hover {
+    background-color: #15ec31;
+}
+QPushButton#button1:pressed {
+    background-color: #e71fa5;
+    /* box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.1); */
+}
+QPushButton#button1:focus {
+    border-color: #FFD700;
+}
+
+QPushButton#button2 {
+    /* background-color: #e44534; */
+    /* color: white; */
+    border-style: solid;
+    border-width: 2px;
+    border-color: #f84130;
+    border-radius: 10px;
+    font-family: Arial;
+    font-size: 14px;
+    text-align: center;
+    padding: 8px;
+    /* box-shadow: 4px 4px 5px rgba(0, 0, 0, 0.2); */
+}
+QPushButton#button2:hover {
+    background-color: #e932ef;
+}
+QPushButton#button2:pressed {
+    background-color: #e71fa5;
+    /* box-shadow: 2px 2px 3px rgba(0, 0, 0, 0.1); */
+}
+QPushButton#button2:focus {
+    border-color: #FFD700;
+}
