@@ -28,7 +28,7 @@ plt.rcParams['font.size'] = 16
 from PyQt6.QtWidgets import (QApplication, QWidget, QPushButton, QToolTip, QMessageBox,
                              QMainWindow, QHBoxLayout, QVBoxLayout, QFileDialog, QSizePolicy,
                              QSlider, QLabel, QLineEdit, QGridLayout, QGroupBox, QListWidget,
-                             QTabWidget, QDialog, QCheckBox, QComboBox)
+                             QTabWidget, QDialog, QCheckBox, QComboBox, QDoubleSpinBox)
 from PyQt6.QtGui import QIcon, QFont, QAction, QGuiApplication
 from PyQt6.QtCore import Qt, QTimer, QFile, QTextStream, QSize
 from PyQt6.QtWidgets import QApplication, QMainWindow, QDockWidget, QTextEdit
@@ -91,13 +91,15 @@ class MainWindow(QMainWindow):
         self.initMenu()
 
         # 设置控制窗口
-        widControl = QWidget()
-        dockControl = QDockWidget("Control", self)
-        dockControl.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
-        dockControl.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-        dockControl.setWidget(widControl)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dockControl)
+        widControl = QTabWidget()
+        # dockControl = QDockWidget("Control", self)
+        # dockControl.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
+        # dockControl.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable)
+        # dockControl.setWidget(widControl)
+        # self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dockControl)
         self.initControl(widControl)
+        self.initProcess(widControl)
+        
 
 
 
@@ -106,6 +108,9 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         central_widget.setLayout(self.layout)
         self.setCentralWidget(central_widget)
+        
+        self.layout.addWidget(widControl, 1)
+        
         tabShow = QTabWidget()
         tabShow.tabBarClicked.connect(self.tabBarShowClicked) 
         self.layout.addWidget(tabShow, 4)
@@ -342,10 +347,11 @@ class MainWindow(QMainWindow):
     ################
     # Init Control #
     ################
-    def initControl(self, widControl: QWidget) -> None:
-        # Control
+    def initControl(self, TabWidget: QTabWidget) -> None:
+        widControl = QGroupBox("Control", self)
         controlLayout = QVBoxLayout()
         widControl.setLayout(controlLayout)
+        TabWidget.addTab(widControl, "Control")
 
         # Folder
         list_widget = QListWidget(self)
@@ -417,6 +423,14 @@ class MainWindow(QMainWindow):
         sliderLayout.addWidget(labColorMap, 1, 0)
         sliderLayout.addWidget(self.combo_box, 1, 1)
         self.combo_box.activated.connect(self.on_combobox_activated) # 绑定事件
+        
+        labDownSample = QLabel('Max Iteration', self)
+        self.spinboxDownSample = QDoubleSpinBox()
+        self.spinboxDownSample.setRange(1, 50)  # 设置值的范围
+        self.spinboxDownSample.setSingleStep(2)  # 设置每次增减的步长
+        self.spinboxDownSample.setValue(1)  # 设置默认值
+        sliderLayout.addWidget(labDownSample, 2, 0)
+        sliderLayout.addWidget(self.spinboxDownSample, 2, 1)
 
         # 创建滑块
         self.sliderLabel = QLabel("Speed: 1")
@@ -424,16 +438,16 @@ class MainWindow(QMainWindow):
         self.slider.setMinimum(1)
         self.slider.setMaximum(30)
         self.slider.valueChanged.connect(self.sliderValueChanged)
-        sliderLayout.addWidget(self.sliderLabel, 2, 0)
-        sliderLayout.addWidget(self.slider, 2, 1)
+        sliderLayout.addWidget(self.sliderLabel, 3, 0)
+        sliderLayout.addWidget(self.slider, 3, 1)
 
         self.sliderLabelFig = QLabel("Fig color scale: 10")
         self.sliderFig      = QSlider(Qt.Orientation.Horizontal)
         self.sliderFig.setMinimum(1)
         self.sliderFig.setMaximum(200)
         self.sliderFig.valueChanged.connect(self.sliderFigChanged)
-        sliderLayout.addWidget(self.sliderLabelFig, 3, 0)
-        sliderLayout.addWidget(self.sliderFig, 3, 1)
+        sliderLayout.addWidget(self.sliderLabelFig, 4, 0)
+        sliderLayout.addWidget(self.sliderFig, 4, 1)
 
 
 
@@ -461,7 +475,9 @@ class MainWindow(QMainWindow):
             return
 
         self.fig.clear(); ax1 = self.fig.add_subplot(111)
-        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, colormap=self.colormap)
+        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, 
+                                        colormap=self.colormap, 
+                                        downsample=self.spinboxDownSample.value())
         self.canvas.draw()
 
     ########################
@@ -483,7 +499,9 @@ class MainWindow(QMainWindow):
         self.indexTime += int(self.slider.value())
         if self.tabNum == 0:
             self.fig.clear(); ax1 = self.fig.add_subplot(111)
-            ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, colormap=self.colormap)
+            ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, 
+                                            colormap=self.colormap,
+                                            downsample=self.spinboxDownSample.value())
             self.canvas.draw()
         elif self.tabNum == 1:
             self.figWigb.clear(); ax1 = self.figWigb.add_subplot(111)
@@ -494,7 +512,9 @@ class MainWindow(QMainWindow):
         self.indexTime -= int(self.slider.value())
         if self.tabNum == 0:
             self.fig.clear(); ax1 = self.fig.add_subplot(111)
-            ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, colormap=self.colormap)
+            ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, 
+                                            colormap=self.colormap,
+                                            downsample=self.spinboxDownSample.value())
             self.canvas.draw()
         elif self.tabNum == 1:
             self.figWigb.clear(); ax1 = self.figWigb.add_subplot(111)
@@ -511,15 +531,45 @@ class MainWindow(QMainWindow):
         self.sliderLabelFig.setText(f"Fig color scale: {value}")
         self.MyProgram.scale = value
         self.fig.clear(); ax1 = self.fig.add_subplot(111)
-        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, colormap=self.colormap)
+        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, 
+                                        colormap=self.colormap,
+                                        downsample=self.spinboxDownSample.value())
         self.canvas.draw()
 
     ## TODO: comboBox
     def on_combobox_activated(self, index):
         self.colormap = self.combo_box.currentText()
         self.fig.clear(); ax1 = self.fig.add_subplot(111)
-        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, colormap=self.colormap)
+        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, 
+                                        colormap=self.colormap,
+                                        downsample=self.spinboxDownSample.value())
         self.canvas.draw()
+
+
+    def initProcess(self, TabWidget: QTabWidget) -> None:
+        widProcess = QGroupBox("Process", self)
+        processLayout = QVBoxLayout()
+        widProcess.setLayout(processLayout)
+        TabWidget.addTab(widProcess, "Process")
+
+        self.availableModulesList = QListWidget()
+        self.selectedModulesList = QListWidget()
+        self.availableModulesList.addItems(["Cut",
+                                            "Filter",
+                                            ])
+
+        self.addButton = QPushButton("Add to selected")
+        self.addButton.clicked.connect(self.addModule)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.availableModulesList)
+        layout.addWidget(self.addButton)
+        layout.addWidget(self.selectedModulesList)
+        widList = QGroupBox("List", self)
+        widList.setLayout(layout)
+        processLayout.addWidget(widList, 0)
+
+        self.selectedModulesList.itemClicked.connect(self.showOptionWindow)
 
 
 
@@ -565,7 +615,9 @@ class MainWindow(QMainWindow):
         """Display data in a figure"""
         self.indexTime = 0
         self.fig.clear(); ax1 = self.fig.add_subplot(111)
-        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, colormap=self.colormap)
+        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, 
+                                        colormap=self.colormap,
+                                        downsample=self.spinboxDownSample.value())
         self.indexTime += int(self.slider.value())
         self.canvas.draw()
 
@@ -578,7 +630,9 @@ class MainWindow(QMainWindow):
     def updateFigure(self):
         """Update plot, help function of imshowAllData"""
         self.fig.clear(); ax1 = self.fig.add_subplot(111) 
-        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, colormap=self.colormap)
+        ax1 = self.MyProgram.imshowData(ax1, indexTime=self.indexTime, 
+                                        colormap=self.colormap,
+                                        downsample=self.spinboxDownSample.value())
         self.canvas.draw()
 
         display_nt = self.MyProgram.display_T / self.MyProgram.dt
@@ -613,4 +667,233 @@ class MainWindow(QMainWindow):
         self.indexTime += int(self.slider.value())
         if self.indexTime >= nt - display_nt:
             self.stopAnimation()
+
+    def addModule(self):
+        # get the selected item
+        selectedItem = self.availableModulesList.currentItem()
+        # add the selected item to the selectedModulesList
+        if selectedItem:
+            self.selectedModulesList.addItem(selectedItem.text())
+
+    def showOptionWindow(self, item):
+        moduleName = item.text()
+        # selecet the option window according to the module name
+        if moduleName == "Cut":
+            optionWindow = OptionWindowCut(moduleName)
+        elif moduleName == "DownSampling":
+            optionWindow = OptionWindowDownSampling(moduleName)
+        elif moduleName == "Filter":
+            optionWindow = OptionWindowFilter(moduleName)
+        elif moduleName == "SignalTrace":
+            optionWindow = OptionWindowSignalTrace(moduleName)
+        else:
+            # option window for default, or prompt that no option is defined for this module
+            optionWindow = QDialog()
+            optionWindow.setWindowTitle("Option Window")
+            layout = QVBoxLayout()
+            label = QLabel("No option is defined for this module")
+            layout.addWidget(label)
+            optionWindow.setLayout(layout)
+
+        # self.imshowDataAll()
+        optionWindow.exec()
+
+
+
+
+
+class OptionWindowCut(QDialog):
+    def __init__(self, moduleName):
+        super().__init__()
+        self.MyProgram = MyProgram1
+        self.setWindowTitle(f"{moduleName} option")
+        self.layout = QVBoxLayout()
+        self.label  = QLabel(f"{moduleName}: option ")
+        self.layout.addWidget(self.label)
+        self.setLayout(self.layout)
+
+        # Fig
+        LayoutFig = QVBoxLayout()
+        widFig    = QGroupBox("Fig", self)
+        widFig.setLayout(LayoutFig)
+        self.layout.addWidget(widFig, 0)
+
+        labXmin  = QLabel('Xmin', self)
+        labXmax  = QLabel('Xmax', self)
+        editXmin = QLineEdit('40', self)
+        editXmax = QLineEdit('50', self)
+
+        grid = QGridLayout()
+        grid.setSpacing(10)
+        grid.addWidget(labXmin, 1, 0)
+        grid.addWidget(editXmin, 1, 1)
+        grid.addWidget(labXmax, 2, 0)
+        grid.addWidget(editXmax, 2, 1)
+        widCut = QGroupBox(self)
+        widCut.setLayout(grid)
+        LayoutFig.addWidget(widCut, 0)
+
+        btnCut = QPushButton('Cut', self)
+        btnCut.setToolTip('Cut Data')
+        btnCut.clicked.connect(
+            lambda: [self.cutData(editXmin.text(), editXmax.text())])
+        LayoutFig.addWidget(btnCut, 1)
+
+    def cutData(self, Xmin, Xmax):
+        self.MyProgram.bool_cut = True
+        self.MyProgram.cutData(Xmin, Xmax)
+        self.Xmin = Xmin; self.Xmax = Xmax
+
+class OptionWindowDownSampling(QDialog):
+    def __init__(self, moduleName):
+        super().__init__()
+        self.MyProgram = MyProgram1
+        self.setWindowTitle(f"{moduleName} option")
+        self.layout = QVBoxLayout()
+        self.label  = QLabel(f"{moduleName}: option")
+        self.layout.addWidget(self.label)
+        self.setLayout(self.layout)
+
+        intNumDownSampling = QLineEdit('10', self)
+        btnDownSampling    = QPushButton('Down Sampling', self)
+        btnDownSampling.setToolTip('Down Sampling')
+        btnDownSampling.clicked.connect(
+            lambda: [self.downSampling(intNumDownSampling=int(intNumDownSampling.text()))])
+        gridDownSampling = QGridLayout()
+        gridDownSampling.setSpacing(10)
+        # gridDownSampling.addWidget(labDownSampling, 1, 0)
+        gridDownSampling.addWidget(intNumDownSampling, 1, 0)
+        gridDownSampling.addWidget(btnDownSampling, 1, 1)
+        widDownSampling = QGroupBox(self)
+        widDownSampling.setLayout(gridDownSampling)
+        self.layout.addWidget(widDownSampling, 0)
+
+    def downSampling(self, intNumDownSampling=2):
+        self.MyProgram.bool_downSampling = True
+        self.MyProgram.downSampling(intNumDownSampling=intNumDownSampling)
+
+
+class OptionWindowFilter(QDialog):
+    def __init__(self, moduleName):
+        super().__init__()
+        self.MyProgram = MyProgram1
+        self.setWindowTitle(f"{moduleName} option")
+        self.layout = QVBoxLayout()
+        self.label = QLabel(f"{moduleName}: option")
+        self.layout.addWidget(self.label)
+        self.setLayout(self.layout)
+
+        labFmin   = QLabel('fmin', self)
+        labFmin1  = QLabel('fmin1', self)
+        labFmax   = QLabel('fmax', self)
+        labFmax1  = QLabel('fmax1', self)
+        labWColumn = QLabel('WColumn', self)
+        labWRow   = QLabel('WRaw', self)
+        editFmin  = QLineEdit('0.01', self)
+        editFmin1 = QLineEdit('0.1', self)
+        editFmax  = QLineEdit('30', self)
+        editFmax1 = QLineEdit('40', self)
+        editWColumn = QLineEdit('0.5', self)
+        editWRow   = QLineEdit('0.5', self)
+
+        btnBandpass = QPushButton('Bandpass', self)
+        btnBandpass.setToolTip('This is a <b>QPushButton</b> widget')
+        btnBandpass.clicked.connect(
+            lambda: [self.filter(editFmin.text(), editFmin1.text(), editFmax.text(), editFmax1.text())])
+        
+        btnRawData = QPushButton('Raw Data', self)
+        btnRawData.setToolTip('This is a <b>QPushButton</b> widget')
+        btnRawData.clicked.connect(
+            lambda: [self.rawData()])
+        
+        btnColumnFK = QPushButton('Column FK', self)
+        btnColumnFK.setToolTip('This is a <b>QPushButton</b> widget')
+        btnColumnFK.clicked.connect(
+            lambda: [self.columnFK(float(editWColumn.text()))])
+        
+        btnRowFK = QPushButton('Row FK', self)
+        btnRowFK.setToolTip('This is a <b>QPushButton</b> widget')
+        btnRowFK.clicked.connect(
+            lambda: [self.rowFK(float(editWRow.text()))])
+
+
+        grid = QGridLayout()
+        widFs = QGroupBox(self)
+        widFs.setLayout(grid)
+        grid.setSpacing(10)
+        grid.addWidget(labFmin, 1, 0)
+        grid.addWidget(editFmin, 1, 1)
+        grid.addWidget(labFmin1, 2, 0)
+        grid.addWidget(editFmin1, 2, 1)
+        grid.addWidget(labFmax, 3, 0)
+        grid.addWidget(editFmax, 3, 1)
+        grid.addWidget(labFmax1, 4, 0)
+        grid.addWidget(editFmax1, 4, 1)
+        grid.addWidget(labWColumn, 5, 0)
+        grid.addWidget(editWColumn, 5, 1)
+        grid.addWidget(labWRow, 6, 0)
+        grid.addWidget(editWRow, 6, 1)
+
+        LayoutFilter = QVBoxLayout()
+        widFilter    = QGroupBox("Filter", self)
+        widFilter.setLayout(LayoutFilter)
+        LayoutFilter.addWidget(widFs, 0)
+        LayoutFilter.addWidget(btnBandpass, 1)
+        LayoutFilter.addWidget(btnRawData, 2)
+        LayoutFilter.addWidget(btnColumnFK, 3)
+        LayoutFilter.addWidget(btnRowFK, 4)
+
+        self.layout.addWidget(widFilter, 0)
+
+    def filter(self, editFmin, editFmin1, editFmax, editFmax1):
+        self.fmin = float(editFmin); self.fmin1 = float(editFmin1)
+        self.fmax = float(editFmax); self.fmax1 = float(editFmax1)
+        # self.MyProgram.bandpassData(
+        #     float(editFmin), float(editFmax))
+        self.MyProgram.bool_filter = True
+        self.MyProgram.RawDataBpFilter(self.fmin, self.fmin1, self.fmax, self.fmax1)
+
+    def rawData(self):
+        self.MyProgram.bool_rawData = True
+        self.MyProgram.RawData()
+        
+    def columnFK(self, w):
+        self.MyProgram.bool_columnFK = True
+        self.MyProgram.RawDataFKFilterColumn(w)
+        
+    def rowFK(self, w):
+        self.MyProgram.bool_rowFK = True
+        self.MyProgram.RawDataFKFilterRow(w)
+
+# TAG: SignalTrace
+class OptionWindowSignalTrace(QDialog):
+    def __init__(self, moduleName):
+        super().__init__()
+        self.MyProgram = MyProgram1
+        self.setWindowTitle(f"{moduleName} option")
+        self.layout = QVBoxLayout()
+        self.label = QLabel(f"{moduleName}: option")
+        self.layout.addWidget(self.label)
+        self.setLayout(self.layout)
+
+        labTraceMilter   = QLabel('trace milter', self)
+        editTraceMilter  = QLineEdit('10', self)
+
+        grid = QGridLayout()
+        widFs = QGroupBox(self)
+        widFs.setLayout(grid)
+        self.layout.addWidget(widFs, 0)
+        grid.setSpacing(10)
+        grid.addWidget(labTraceMilter, 1, 0)
+        grid.addWidget(editTraceMilter, 1, 1)
+        
+
+        btnSignalTrace = QPushButton('SignalTrace', self)
+        btnSignalTrace.setToolTip('This is a <b>QPushButton</b> widget')
+        btnSignalTrace.clicked.connect(
+            lambda: [self.signalTrace(editTraceMilter.text())])
+        self.layout.addWidget(btnSignalTrace, 1)
+
+
+
 

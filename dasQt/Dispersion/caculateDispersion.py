@@ -6,18 +6,29 @@ from .dispersion import get_dispersion
 class CaculateDispersion():
     def __init__(self, MyProgram):
         self.MyProgram = MyProgram
-        self.__dict__.update(self.MyProgram.__dict__)
-        # self.dt = self.MyProgram.dt
-        # self.dx = self.MyProgram.dx
-        # self.nt = self.MyProgram.nt
-        # self.profile_X = self.MyProgram.profile_X
+        # self.__dict__.update(self.MyProgram.__dict__)
+        self.dt = self.MyProgram.dt
+        self.dx = self.MyProgram.dx
+        self.nt = self.MyProgram.nt
+        self.profile_X = self.MyProgram.profile_X
+        self.data = self.MyProgram.data
+        self.bool_downcc = False
+        self.bool_upcc = False
         
+        self.CClist = []
+        self.indexClick = 0
         
         pass
     
     def readNextData(self):
         self.MyProgram.readNextData()
-        self.__dict__.update(self.MyProgram.__dict__)
+        # self.__dict__.update(self.MyProgram.__dict__)
+        self.dt = self.MyProgram.dt
+        self.dx = self.MyProgram.dx
+        self.nt = self.MyProgram.nt
+        self.profile_X = self.MyProgram.profile_X
+        self.data = self.MyProgram.data
+
 
     def caculateCC(self, dispersion_parse=None):
         """dasQt/das.py made by Zhiyu Zhang JiLin University in 2024-01-05 17h.
@@ -125,6 +136,7 @@ class CaculateDispersion():
 
             # smooth the source spectrum
             sfft1 = DAS_module.smooth_source_spect(white_spect[iiS], prepro_para)
+
             # correlate one source with all receivers
             corr, tindx = DAS_module.correlate(sfft1, white_spect, prepro_para, Nfft)
 
@@ -146,9 +158,8 @@ class CaculateDispersion():
         return data_liner
 
     def selfCaculateCC(self, dispersion_parse):
-        scale = 0.5
         data_liner = self.caculateCC(dispersion_parse=dispersion_parse)
-        
+
         self.cc = data_liner
         if self.indexClick == 0:
             self.pre_dispersion_data  = data_liner
@@ -168,13 +179,12 @@ class CaculateDispersion():
                 self.indexClick          += 1
                 # self.logger.debug(f"now index is {self.indexClick}")
 
-    def caculateCCAll(self) -> None:
+    def caculateCCAll(self, smethod='linear') -> None:
         """caculate dispersion for all files with stack"""
 
         dt = self.dt
         
         data = np.array(self.CClist)
-        print(data.shape)
         n, nt, nx = data.shape
         data = data.reshape(n, -1)
 
@@ -182,7 +192,7 @@ class CaculateDispersion():
             'samp_freq': 1/dt,
             'npts_chunk': nt,
             'nsta': nx,
-            'stack_method': 'linear'
+            'stack_method': smethod
         }
 
         allstacks1 = DAS_module.stacking(data,stack_para)
@@ -217,33 +227,40 @@ class CaculateDispersion():
         # self.logger.info(f"Save Dispersion Done! {filename}")
 
     # TODO: CC Data get Up
-    def getUpCC(self, up) -> None:
-        """get up cross-correlation"""
-        self.bool_upcc = up
-
-    def getDownCC(self, down) -> None:
+    def getDownOrUpCC(self, down) -> None:
         """get down cross-correlation"""
-        self.bool_downcc = down
+        if down:
+            self.bool_downcc = True
+            self.bool_upcc = False
+        else:
+            self.bool_downcc = False
+            self.bool_upcc = True
+
+    def clearCC(self) -> None:
+        """clear cross-correlation"""
+        self.cc = None
+        self.ccAll = None
+        self.CClist = []
+        self.indexClick = 0
 
 
-
-    def selfGetDispersion(self, cmin=10., cmax=1000.0, dc=5., fmin=4.0, fmax=18.0, df=0.1, bool_all=False):
+    def selfGetDispersion(self, cmin=10., cmax=1000.0, dc=5., fmin=4.0, fmax=18.0, bool_all=False):
         if bool_all:
             selfcc = self.ccAll
         else:
             selfcc = self.cc
         
+        nt, nx = selfcc.shape
         if self.bool_downcc:
-            nt, nx = selfcc.shape
             cc = selfcc[:nt//2, :]
+            cc = cc[::-1, :]
         elif self.bool_upcc:
-            nt, nx = selfcc.shape
             cc = selfcc[nt//2:, :]
         else:
             cc = selfcc
 
         f, c, img, U, t = get_dispersion(cc, self.dx, self.dt, 
-                                             cmin, cmax, dc, fmin, fmax, df)
+                                             cmin, cmax, dc, fmin, fmax)
         
         for i in range(img.shape[1]):
             img[:,i] /= np.max(img[:,i])
@@ -255,16 +272,24 @@ class CaculateDispersion():
     def imshowCC(self, ax, bool_all=False):
         if bool_all:
             cc = self.ccAll
+            # 设置色彩映射的中心为数据的中位数
+            scale = 10.0
+            midpoint = np.median(cc)
+            extreme = max(abs(cc.min()), abs(cc.max()))
+            vmin, vmax = -extreme/scale, extreme/scale
         else:
             cc = self.cc
+            vmin, vmax = np.min(cc), np.max(cc)
 
         cha1 = self.profile_X[self.dispersion_cha1]
         cha2 = self.profile_X[self.dispersion_cha2]
-        # nt   = self.pre_dispersion_data.shape[0]
         nt = self.cc.shape[0]
 
+
+
         ax0 = ax.imshow(cc, cmap='RdBu_r', aspect='auto', interpolation='none',
-                  origin='lower', extent=[cha1, cha2, -nt//2*self.dt, nt//2*self.dt])
+                  origin='lower', extent=[cha1, cha2, -nt//2*self.dt, nt//2*self.dt],
+                  vmin=vmin, vmax=vmax)
 
         ax.set_xlabel('distance (m)')
         ax.set_ylabel('time (s)')
@@ -273,8 +298,8 @@ class CaculateDispersion():
         # self.logger.info("ImShow Cross-correlation Done!")
         return ax
 
-    def imshowDispersion(self, ax, cmin, cmax, dc, fmin, fmax, df, bool_all=False):
-        f, c, img, U, t = self.selfGetDispersion(cmin, cmax, dc, fmin, fmax, df, bool_all)
+    def imshowDispersion(self, ax, cmin, cmax, dc, fmin, fmax, bool_all=False):
+        f, c, img, U, t = self.selfGetDispersion(cmin, cmax, dc, fmin, fmax, bool_all)
         if bool_all:
             self.dispersionAll = img
             self.f = f

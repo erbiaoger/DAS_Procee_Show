@@ -194,7 +194,6 @@ def smooth_source_spect(fft1,cc_para):
     smoothspect_N = cc_para['smoothspect_N']
 
     if cc_method == 'deconv':
-
         #-----normalize single-station cc to z component-----
         temp = moving_ave(np.abs(fft1),smoothspect_N)
         try:

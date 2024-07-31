@@ -36,9 +36,10 @@ class DispersionMainWindow(QMainWindow):
         self.is_closed           : bool = False
         self.bool_saveCC         : bool = False
         self.bool_showDispersion : bool = False
-        self.editFreqNorm        :str   = 'no'
+        self.editFreqNorm        :str   = 'rma'
         self.editTimeNorm        :str   = 'no'
-        self.editCCMethod        :str   = 'xcorr'
+        self.editCCMethod        :str   = 'coherency'
+        self.editSmethod         :str   = 'pws'
         
         self.logger = HandleLog(os.path.split(__file__)[-1].split(".")[0], path=os.getcwd(), level="DEBUG")
         self.MyProgram = CaculateDispersion(MyProgram)
@@ -129,9 +130,9 @@ class DispersionMainWindow(QMainWindow):
 
         labFreqNorm = QLabel('freq norm', self)
         self.comboBoxFreqNorm = QComboBox()       # 创建下拉菜单
-        self.comboBoxFreqNorm.addItem("no")
         self.comboBoxFreqNorm.addItem("rma")
         self.comboBoxFreqNorm.addItem("phase_only")
+        self.comboBoxFreqNorm.addItem("no")
         self.comboBoxFreqNorm.activated.connect(self.on_comboBoxFreqNorm) # 连接信号
 
         labTimeNorm = QLabel('time norm', self)
@@ -143,8 +144,9 @@ class DispersionMainWindow(QMainWindow):
 
         labCCMethon = QLabel('cc method', self)
         self.comboBoxCCMethod = QComboBox()       # 创建下拉菜单
-        self.comboBoxCCMethod.addItem("xcorr")
+        self.comboBoxCCMethod.addItem("coherency")
         self.comboBoxCCMethod.addItem("deconv")
+        self.comboBoxCCMethod.addItem("xcorr")
         self.comboBoxCCMethod.activated.connect(self.on_comboBoxCCMethod) # 连接信号
 
         labSmooth_N            = QLabel('smooth_N', self)
@@ -154,6 +156,7 @@ class DispersionMainWindow(QMainWindow):
         labCh1                 = QLabel('Xmin', self)
         labCh2                 = QLabel('Xmax', self)
         labShot                = QLabel('Shot', self)
+        labSmethod = QLabel('Smethod', self)
         self.editFmin          = QLineEdit('5', self)
         self.editFmax          = QLineEdit('15', self)
         self.editSmooth_N      = QLineEdit('5', self)
@@ -163,6 +166,13 @@ class DispersionMainWindow(QMainWindow):
         self.editCh1           = QLineEdit('180', self)
         self.editCh2           = QLineEdit('300', self)
         self.editShot          = QLineEdit('0', self)
+        self.comboBoxSmethod = QComboBox()       # 创建下拉菜单
+        self.comboBoxSmethod.addItem("pws")
+        self.comboBoxSmethod.addItem("robust")
+        self.comboBoxSmethod.addItem("linear")
+        self.comboBoxSmethod.activated.connect(self.on_comboBoxSmethod) # 连接信号
+
+
 
         grid1 = QGridLayout()
         grid1.setSpacing(10)
@@ -196,6 +206,8 @@ class DispersionMainWindow(QMainWindow):
         grid3.addWidget(self.editCh2, 3, 1)
         grid3.addWidget(labShot, 4, 0)
         grid3.addWidget(self.editShot, 4, 1)
+        grid3.addWidget(labSmethod, 5, 0)
+        grid3.addWidget(self.comboBoxSmethod, 5, 1)
 
         widFilter = QGroupBox("Filter", self)
         widFilter.setLayout(grid1)
@@ -230,6 +242,12 @@ class DispersionMainWindow(QMainWindow):
             lambda: [self.readNext20CC()])
         self.editNext20CC = QLineEdit('20', self)
         
+        btnClearCC = QPushButton('Clear CC', self)
+        btnClearCC.setToolTip('This is a <b>QPushButton</b> widget')
+        btnClearCC.clicked.connect(
+            lambda: [self.clearCC()])
+        
+        
         self.checkBox = QCheckBox('Save CC', self)
         self.checkBox.setChecked(False)
         self.checkBox.stateChanged.connect(self.checkBoxChanged)
@@ -242,6 +260,7 @@ class DispersionMainWindow(QMainWindow):
         layGrid.addWidget(self.checkBox, 2, 1)
         layGrid.addWidget(btnNext20CC, 3, 0)
         layGrid.addWidget(self.editNext20CC, 3, 1)
+        layGrid.addWidget(btnClearCC, 4, 0)
 
 
 
@@ -270,13 +289,13 @@ class DispersionMainWindow(QMainWindow):
         labdc  = QLabel('dc', self)
         labfmin = QLabel('fmin', self)
         labfmax = QLabel('fmax', self)
-        labdf  = QLabel('df', self)
         self.editCmin            = QLineEdit('10.0', self)
         self.editCmax            = QLineEdit('600.0', self)
         self.editdc              = QLineEdit('1.0', self)
         self.editfmin_dispersion = QLineEdit('3.0', self)
         self.editfmax_dispersion = QLineEdit('20.0', self)
-        self.editdf              = QLineEdit('2.0', self)
+
+
         
         grid = QGridLayout()
         grid.setSpacing(10)
@@ -290,8 +309,6 @@ class DispersionMainWindow(QMainWindow):
         grid.addWidget(self.editfmin_dispersion, 4, 1)
         grid.addWidget(labfmax, 5, 0)
         grid.addWidget(self.editfmax_dispersion, 5, 1)
-        grid.addWidget(labdf, 6, 0)
-        grid.addWidget(self.editdf, 6, 1)
         widGroup.setLayout(grid)
         
         
@@ -315,8 +332,7 @@ class DispersionMainWindow(QMainWindow):
                 float(self.editCmax.text()), 
                 float(self.editdc.text()),
                 float(self.editfmin_dispersion.text()), 
-                float(self.editfmax_dispersion.text()), 
-                float(self.editdf.text()))])
+                float(self.editfmax_dispersion.text()))])
 
         btnGetAllDispersion = QPushButton('Get All Dispersion', self)
         btnGetAllDispersion.setToolTip('This is a <b>QPushButton</b> widget')
@@ -327,7 +343,6 @@ class DispersionMainWindow(QMainWindow):
                     float(self.editdc.text()),
                     float(self.editfmin_dispersion.text()), 
                     float(self.editfmax_dispersion.text()), 
-                    float(self.editdf.text()),
                     bool_all=True)])
 
         btnNextData = QPushButton('Next Data', self)
@@ -354,7 +369,6 @@ class DispersionMainWindow(QMainWindow):
             float(self.editdc.text()),
             float(self.editfmin_dispersion.text()), 
             float(self.editfmax_dispersion.text()), 
-            float(self.editdf.text()),
             bool_all=True)])
 
         
@@ -389,34 +403,34 @@ class DispersionMainWindow(QMainWindow):
 
 
     def readNextDispersion(self):
-        self.MyProgram.readNextData
+        self.MyProgram.readNextData()
         self.selfCaculateCC()
         self.imshowCC()
+        
         self.imshowDispersion(
             float(self.editCmin.text()), 
             float(self.editCmax.text()), 
             float(self.editdc.text()),
             float(self.editfmin_dispersion.text()), 
-            float(self.editfmax_dispersion.text()), 
-            float(self.editdf.text()))
+            float(self.editfmax_dispersion.text()))
 
     def readNext20CC(self):
         for i in range(int(self.editNext20CC.text())):
-            self.MyProgram.readNextData
+            self.MyProgram.readNextData()
             self.selfCaculateCC()
 
             if i == int(self.editNext20CC.text()) - 1:
-                self.MyProgram.caculateCCAll()
+                self.MyProgram.caculateCCAll(str(self.editSmethod))
                 self.imshowCC(bool_all=True)
 
 
     def readNext20Dispersion(self):
         for i in range(int(self.editNext20CC.text())):
-            self.MyProgram.readNextData
+            self.MyProgram.readNextData()
             self.selfCaculateCC()
 
             if i == int(self.editNext20CC.text()) - 1:
-                self.MyProgram.caculateCCAll()
+                self.MyProgram.caculateCCAll(str(self.editSmethod))
                 self.imshowCC(bool_all=True)
                 self.imshowDispersion(
                     float(self.editCmin.text()), 
@@ -424,50 +438,21 @@ class DispersionMainWindow(QMainWindow):
                     float(self.editdc.text()),
                     float(self.editfmin_dispersion.text()), 
                     float(self.editfmax_dispersion.text()), 
-                    float(self.editdf.text()),
                     bool_all=True)
 
+    def clearCC(self):
+        self.MyProgram.clearCC()
 
 
-        
-    def imshowCCAll(self):
-        self.figCC.clear(); ax1 = self.figCC.add_subplot(111)
-        ax1.cla()
-        self.MyProgram.caculateCCAll(ax1)
-        self.canvasCC.draw()
-        # self.update_content()
-        print('\n\n')
-        print('CC All')
-        print('\n\n')
-
-    def imshowDispersion(self, Cmin, Cmax, dc, fmin, fmax, df, bool_all=False):
+    def imshowDispersion(self, Cmin, Cmax, dc, fmin, fmax, bool_all=False):
         self.figDispersion.clear(); ax1 = self.figDispersion.add_subplot(111)
         ax1.cla()
-        self.MyProgram.imshowDispersion(ax1, Cmin, Cmax, dc, fmin, fmax, df, bool_all)
+        self.MyProgram.imshowDispersion(ax1, Cmin, Cmax, dc, fmin, fmax, bool_all)
         self.canvasDispersion.draw()
         print('\n\n')
         print('imshowDispersion')
         print('\n\n')
 
-
-    # def imshowDispersionAll(self, Cmin, Cmax, dc, fmin, fmax):
-    #     if self.bool_showDispersion == False:
-    #         widFigure = QWidget()
-    #         dockFigure = QDockWidget("Control", self)
-    #         dockFigure.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
-    #         dockFigure.setFeatures(QDockWidget.DockWidgetFeature.DockWidgetMovable | QDockWidget.DockWidgetFeature.DockWidgetFloatable)
-    #         dockFigure.setWidget(widFigure)
-    #         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dockFigure)
-    #         self.initCCFigure(widFigure)
-    #         self.bool_showDispersion = True
-        
-    #     self.figDispersion.clear(); ax1 = self.figDispersion.add_subplot(111)
-    #     ax1.cla()
-    #     self.MyProgram.imshowDispersionAll(ax1, Cmin, Cmax, dc, fmin, fmax)
-    #     self.canvasDispersion.draw()
-    #     print('\n\n')
-    #     print('imshowDispersionAll')
-    #     print('\n\n')
 
     def selfCaculateCC(self):
         dispersion_parse = {
@@ -505,22 +490,20 @@ class DispersionMainWindow(QMainWindow):
     # TODO : CC data get up and down
     def getUpCC(self):
         if self.btnUp.isChecked():
-            up = True
-            self.MyProgram.getUpCC(up)
+            self.btnDown.setChecked(False)
+            self.MyProgram.getDownOrUpCC(self.btnDown.isChecked())
             self.btnUp.setText('Stop')
+            self.btnDown.setText('Down CC')
         else:
-            up = False
-            self.MyProgram.getUpCC(up)
             self.btnUp.setText('Up CC')
     
     def getDownCC(self):
         if self.btnDown.isChecked():
-            down = True
-            self.MyProgram.getDownCC(down)
+            self.btnUp.setChecked(False)
+            self.MyProgram.getDownOrUpCC(self.btnDown.isChecked())
             self.btnDown.setText('Stop')
+            self.btnUp.setText('Up CC')
         else:
-            down = False
-            self.MyProgram.getDownCC(down)
             self.btnDown.setText('Down CC')
 
     def saveCC(self, filename):
@@ -538,6 +521,9 @@ class DispersionMainWindow(QMainWindow):
 
     def on_comboBoxCCMethod(self):
         self.editCCMethod = self.comboBoxCCMethod.currentText()
+    
+    def on_comboBoxSmethod(self):
+        self.editSmethod = self.comboBoxSmethod.currentText()
 
 
 
@@ -574,12 +560,7 @@ class DispersionMainWindow(QMainWindow):
             self.bool_saveDispersion = True
             self.MyProgram.bool_saveDispersion = True
 
-    # def update_content(self):
-    #     # 获取当前窗口位置
-    #     current_pos = self.pos()
 
-    #     # 确保窗口位置不变
-    #     self.move(current_pos)
 
 
 

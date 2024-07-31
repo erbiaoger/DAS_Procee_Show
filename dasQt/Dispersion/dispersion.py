@@ -35,7 +35,7 @@ def get_fk(traces, dt, nt, dx, nr):
     U = scipy.fftpack.fft2(traces)
     return U, k, f[0:nt//2]
 
-def get_dispersion(traces,dx, dt,cmin,cmax,dc,fmin, fmax, ddf):
+def get_dispersion(traces,dx, dt,cmin,cmax,dc,fmin, fmax):
     """ calculate dispersion curves after Park et al. 1998
     INPUTS
     traces: SU traces
@@ -69,9 +69,7 @@ def get_dispersion(traces,dx, dt,cmin,cmax,dc,fmin, fmax, ddf):
     c = np.arange(cmin,cmax,dc) # set phase velocity range
     
     df = f[1] - f[0]
-    if df > ddf:
-        print('dt: ', dt, 'df: ', df, 'ddf: ', ddf)
-        df = ddf
+
     fmax_idx = int(fmax//df)
     fmin_idx = int(fmin//df)
     fr = np.arange(fmin, fmax, df)

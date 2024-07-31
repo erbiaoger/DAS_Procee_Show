@@ -31,9 +31,9 @@ from dasQt.utools.config import loadConfig, saveConfig
 from dasQt.utools.readh5 import readh5
 from dasQt.utools.readdat import readdat
 from dasQt.CarClass.norm_trace1 import norm_trace
-from dasQt.process.bpFilter import bpFilter
-from dasQt.process.fkDip import fkDip
-from dasQt.process.freqattributes import (spectrum, spectrogram, fk_transform)
+from dasQt.Process.bpFilter import bpFilter
+from dasQt.Process.fkDip import fkDip
+from dasQt.Process.freqattributes import (spectrum, spectrogram, fk_transform)
 from dasQt.Cog.cog import ncf_corre_cog
 from dasQt.CarClass.curves_class import pickPoints, autoSeparation, deleteSmallClass, showClass, getVelocity, classCar
 from dasQt.utools.logPy3 import HandleLog
@@ -85,7 +85,7 @@ class DAS():
         self.radon_parse     : dict = {}
         self.logger = HandleLog(os.path.split(__file__)[-1].split(".")[0], path=os.getcwd(), level="info")
         
-        self.model = YOLO('./dasQt/YOLO/best.pt')
+        # self.model = YOLO('./dasQt/YOLO/best.pt')
 
 
     #-----------------------------------------------------------
@@ -119,14 +119,11 @@ class DAS():
         self.fs, self.dx, self.dt, self.nt, self.nx, self.gauge = metadata['fs'], metadata['dx'], metadata['dt'], metadata['nt'], metadata['nx'], metadata['gauge']
 
         self.profile_X   = np.arange(self.nx) * self.dx
-        self.pre_data   = self.data.copy()
-        self.orig_data  = self.data.copy()
-        self.radon_data = self.data.copy()
+        self.process_data = self.data.copy()
         filepath         = pathlib.Path(filename)
 
         self.process()
-        self.logger.info(f"\n{filepath.name} read done!")
-        self.logger.info(f"\nnt: {self.nt}, nx: {self.nx}, dt: {self.dt}, dx: {self.dx}")
+        self.logger.info(f"\n{filepath.name} read done!\nnt: {self.nt}, nx: {self.nx}, fs: {int(1./self.dt)}, dx: {self.dx}, gauge: {self.gauge}")
         if self.bool_saveFig:
             self.saveFig(colormap=self.colormap)
 
@@ -147,9 +144,7 @@ class DAS():
 
 
         self.profile_X   = np.arange(self.nx) * self.dx
-        self.pre_data   = self.data.copy()
-        self.orig_data  = self.data.copy()
-        self.radon_data = self.data.copy()
+        self.process_data   = self.data.copy()
         filepath         = pathlib.Path(filename)
 
         self.process()
@@ -209,33 +204,24 @@ class DAS():
     #
     #-----------------------------------------------------------
 
-    def rawData(self) -> None:
-        """reset the data to the original data"""
-        self.data = self.pre_data.copy()
-
-
-    def downSampling(self, intNumDownSampling=2) -> None:
-        """Down Sampling"""
-        self.initNumDownSampling = intNumDownSampling
-        self.data                = self.data[::intNumDownSampling, :]
-        self.dt                  = self.dt * intNumDownSampling
-        self.nt                  = self.data.shape[0]
 
 
     def cutData(self, Xmin, Xmax) -> None:
         """Cut the data by Xmin and Xmax"""
         self.profile_Xmin = Xmin; self.profile_Xmax = Xmax
-        X = np.arange(self.nx) * self.dx
+        if self.profile_X is None:
+            self.profile_X = np.arange(self.nx) * self.dx
+            
 
-        Xmin_Num = np.abs(float(Xmin) - X).argmin()
+        Xmin_Num = np.abs(float(Xmin) - self.profile_X).argmin()
         if Xmax == 'end':
             Xmax_Num = self.nx
         else:
-            Xmax_Num = np.abs(float(Xmax) - X).argmin()
+            Xmax_Num = np.abs(float(Xmax) - self.profile_X).argmin()
 
-        self.data = self.orig_data[:, Xmin_Num:Xmax_Num]
-        self.profile_X = X[Xmin_Num:Xmax_Num]
-        self.nx = self.data.shape[1]
+        self.process_data = self.process_data[:, Xmin_Num:Xmax_Num]
+        self.profile_X = self.profile_X[Xmin_Num:Xmax_Num]
+        self.nx = self.process_data.shape[1]
         self.logger.info("Cut Data Done!")
 
 
@@ -243,191 +229,17 @@ class DAS():
     def RawDataBpFilter(self, fmin, fmin1, fmax, fmax1) -> None:
         """"Bandpass filter for raw data"""
         self.fmin = fmin; self.fmin1 = fmin1; self.fmax = fmax; self.fmax1 = fmax1
-        self.data = bpFilter(self.data, self.dt, fmin, fmin1, fmax, fmax1)
+        self.process_data = bpFilter(self.process_data, self.dt, fmin, fmin1, fmax, fmax1)
 
     def RawDataFKFilterColumn(self, w=0.05) -> None:
         self.w_column = w
-        data = fkDip(self.data, w)
-        self.data = self.data - data
+        data = fkDip(self.process_data, w)
+        self.process_data = self.process_data - data
 
     def RawDataFKFilterRow(self, w=0.05) -> None:
         self.w_row = w
-        data = fkDip(self.data.T, w)
-        self.data = self.data - data.T
-
-
-    # def caculateCC(self, dispersion_parse=None):
-    #     """dasQt/das.py made by Zhiyu Zhang JiLin University in 2024-01-05 17h.
-    #     Parameters
-    #     ----------
-    #     sps : float, (1/self.dt)
-    #         current sampling rate
-    #     samp_freq : float, (1/self.dt)
-    #         targeted sampling rate
-    #     freqmin : float, (0.1)
-    #         pre filtering frequency bandwidth预滤波频率带宽
-    #     freqmax : float, (10)
-    #         note this cannot exceed Nquist freq
-    #     freq_norm : str, ('rma')
-    #         'no' for no whitening, or 'rma' for running-mean average, 'phase_only' for sign-bit normalization in freq domain.
-    #     time_norm : str, ('one_bit')
-    #         'no' for no normalization, or 'rma', 'one_bit' for normalization in time domain
-    #     cc_method : str, ('xcorr')
-    #         'xcorr' for pure cross correlation, 'deconv' for deconvolution;
-    #     smooth_N : int, (5)
-    #         moving window length for time domain normalization if selected (points)
-    #     smoothspect_N : int, (5)
-    #         moving window length to smooth spectrum amplitude (points)
-    #     maxlag : float, (0.5)   
-    #         lags of cross-correlation to save (sec)
-    #     max_over_std : float, (10**9)   
-    #         threahold to remove window of bad signals: set it to 10*9 if prefer not to remove them
-    #     cc_len : float, (5)
-    #         correlate length in second(sec)
-    #     cha1 : int, (31)
-    #         start channel index for the sub-array
-    #     cha2 : int, (70)
-    #         end channel index for the sub-array
-
-    #     Returns
-    #     -------
-    #     data_liner : ndarray
-    #         DESCRIPTION.
-    #     """
-
-        
-    #     # ---------------------------input parameters---------------------------------#
-    #     # FOR "COHERENCY" PLEASE set freq_norm to "rma", time_norm to "no" and cc_method to "xcorr"
-    #     dt                   = self.dt
-    #     sps                  = 1/dt                             # current sampling rate
-    #     samp_freq            = 1/dt                             # targeted sampling rate
-    #     cha1                 = np.abs(float(dispersion_parse['cha1']) - self.profile_X).argmin()
-    #     cha2                 = np.abs(float(dispersion_parse['cha2']) - self.profile_X).argmin()
-    #     self.dispersion_cha1 = cha1
-    #     self.dispersion_cha2 = cha2
-    #     self.logger.debug(f"cha1: {cha1}, cha2: {cha2}")
-
-    #     cc_len               = dispersion_parse['cc_len']       # correlate length in second(sec)
-    #     maxlag               = dispersion_parse['maxlag']       # lags of cross-correlation to save (sec)
-    #     data                 = self.data[:, cha1:cha2].copy()
-    #     cha_list             = np.array(range(cha1, cha2))
-    #     nsta                 = len(cha_list)
-    #     n_pair               = int(nsta*(data.shape[0]*dt//cc_len))
-    #     n_lag                = int(maxlag * samp_freq * 2 + 1)
-
-    #     corr_full            = np.zeros([n_lag, n_pair], dtype=np.float32)
-    #     stack_full           = np.zeros([1, n_pair], dtype=np.int32)
-
-    #     prepro_para     = { 
-    #         'sps'          : 1/dt,                              # current sampling rate
-    #         'npts_chunk'   : cc_len * sps,                      # correlate length in second(sec)
-    #         'nsta'         : nsta,                              # number of stations
-    #         'cha_list'     : cha_list,                          # channel list
-    #         'samp_freq'    : 1/dt,                              # targeted sampling rate
-    #         'freqmin'      : dispersion_parse['freqmin'],       # pre filtering frequency bandwidth
-    #         'freqmax'      : dispersion_parse['freqmax'],       # note this cannot exceed Nquist freq
-    #         'freq_norm'    : dispersion_parse['freq_norm'],     # 'no' for no whitening, or 'rma' for running-mean average, 'phase_only' for sign-bit normalization in freq domain.
-    #         'time_norm'    : dispersion_parse['time_norm'],     # 'no' for no normalization, or 'rma','one_bit' for normalization in time domain
-    #         'cc_method'    : dispersion_parse['cc_method'],     # 'xcorr' for pure cross correlation, 'deconv' for deconvolution;
-    #         'smooth_N'     : dispersion_parse['smooth_N'],      # moving window length for time domain normalization if selected (points)
-    #         'smoothspect_N': dispersion_parse['smoothspect_N'], # moving window length to smooth spectrum amplitude (points)
-    #         'maxlag'       : dispersion_parse['maxlag'],        # lags of cross-correlation to save (sec)
-    #         'max_over_std' : dispersion_parse['max_over_std']   # threahold to remove window of bad signals: set it to 10*9 if prefer not to remove them
-    #     }
-
-    #     # -------------------------------------------------开始计算---------------------------------------------------
-    #     mm1  = data.shape[0]
-    #     mm   = int(mm1*dt//cc_len)
-    #     mm10 = int(1/dt*cc_len)
-    #     for imin in tqdm(range(1,mm+1), desc="Processing", ncols=100):
-    #         tdata=data[((imin-1)*mm10):imin*mm10, :]
-
-    #         # preprocess the raw data
-    #         trace_stdS, dataS = DAS_module.preprocess_raw_make_stat(tdata ,prepro_para)
-    #         # do normalization if needed
-    #         white_spect = DAS_module.noise_processing(dataS, prepro_para)
-    #         Nfft        = white_spect.shape[1]
-    #         Nfft2       = Nfft                                             // 2
-    #         data_white  = white_spect[:, :Nfft2]
-    #         del dataS, white_spect
-    #         # find the good data
-    #         ind = np.where((trace_stdS < prepro_para['max_over_std']) &
-    #                     (trace_stdS > 0) &
-    #                     (np.isnan(trace_stdS) == 0))[0]
-    #         if not len(ind):
-    #             raise ValueError('the max_over_std criteria is too high which results in no data')
-    #         sta         = cha_list[ind]
-    #         white_spect = data_white[ind]
-
-    #         iiS = int(dispersion_parse['iShot'])
-
-    #         # smooth the source spectrum
-    #         sfft1 = DAS_module.smooth_source_spect(white_spect[iiS], prepro_para)
-    #         # correlate one source with all receivers
-    #         corr, tindx = DAS_module.correlate(sfft1, white_spect, prepro_para, Nfft)
-
-    #         # update the receiver list
-    #         # tsta         = sta[iiS:]
-    #         # receiver_lst = tsta[tindx]
-    #         # iS           = int((cha2 * 2 - cha1 - sta[iiS] + 1) * (sta[iiS] - cha1) / 2)
-
-    #         # stacking one minute
-    #         corr_full[:, (imin-1)*nsta:imin*nsta] += corr.T
-
-    #     data_liner = np.zeros((n_lag, nsta))
-    #     for iiN in range(0, mm):
-    #         data_liner = data_liner + corr_full[:, iiN * nsta:(iiN + 1) * nsta]
-    #     data_liner = data_liner / mm
-    #     data_liner = normalize_data(data_liner)
-        
-    #     # return allstacks1, data_liner
-    #     return data_liner
-
-    # def selfCaculateCC(self, dispersion_parse):
-    #     scale = 0.5
-    #     data_liner = self.caculateCC(dispersion_parse=dispersion_parse)
-        
-    #     self.cc = data_liner
-    #     if self.indexClick == 0:
-    #         self.pre_dispersion_data  = data_liner
-    #         self.indexClick          += 1
-    #         self.CClist.append(data_liner)
-    #     else:
-    #         if self.pre_dispersion_data.shape != data_liner.shape:
-    #             self.pre_dispersion_data = data_liner
-    #             self.indexClick          = 0
-    #             self.CClist = []
-    #             self.logger.debug(f"dp para changed, last index is {self.indexClick}, now index is 0")
-    #         else:
-                
-    #             # self.pre_dispersion_data  = (self.pre_dispersion_data*self.indexClick + data_liner) / (self.indexClick+1)
-    #             self.CClist.append(data_liner)
-                
-    #             self.indexClick          += 1
-    #             self.logger.debug(f"now index is {self.indexClick}")
-
-    # def caculateCCAll(self) -> None:
-    #     """caculate dispersion for all files with stack"""
-
-    #     dt = self.dt
-        
-    #     data = np.array(self.CClist)
-    #     print(data.shape)
-    #     n, nt, nx = data.shape
-    #     data = data.reshape(n, -1)
-
-    #     stack_para = {
-    #         'samp_freq': 1/dt,
-    #         'npts_chunk': nt,
-    #         'nsta': nx,
-    #         'stack_method': 'linear'
-    #     }
-
-    #     allstacks1 = DAS_module.stacking(data,stack_para)
-    #     nt, nx = allstacks1.shape
-    #     self.ccAll = allstacks1
-
-
+        data = fkDip(self.process_data.T, w)
+        self.process_data = self.process_data - data.T
 
 
     def muteData(d, dx, dt, Xmin, Ymin, Xmax, Ymax, mode='up', slope=0.0):
@@ -463,42 +275,10 @@ class DAS():
         
         return d, slope
 
-    # def saveCC(self, filename) -> None:
-    #     """save CC data"""
-    #     np.savez(filename, 
-    #                 data=self.ccAll, 
-    #                 x=self.profile_X[self.dispersion_cha1:self.dispersion_cha2],
-    #                 t=np.linspace(-self.ccAll.shape[0]*self.dt/2, self.ccAll.shape[0]*self.dt/2, self.ccAll.shape[0]))
-
-    #     self.logger.info(f"Save CC Done! {filename}")
-
-    # def saveDispersion(self, filename) -> None:
-    #     """save dispersion data"""
-    #     np.savez(filename, 
-    #                 data=self.dispersionAll, 
-    #                 f=self.f,
-    #                 c=self.c)
-
-    #     self.logger.info(f"Save Dispersion Done! {filename}")
-
-
-
-    # def radonBpFilter(self) -> None:
-    #     """"radon data bandpass filter"""
-    #     fmin  = self.radon_parse['fmin']
-    #     fmin1 = self.radon_parse['fmin1']
-    #     fmax  = self.radon_parse['fmax']
-    #     fmax1 = self.radon_parse['fmax1']
-    #     cha1  = self.radon_parse['cha1']
-    #     cha2  = self.radon_parse['cha2']
-        
-    #     self.radon_data[:, cha1:cha2] = bpFilter(self.radon_data[:, cha1:cha2], self.dt, fmin, fmin1, fmax, fmax1)
-    #     # self.radon_data[:, cha1:cha2] = bpFilter(self.radon_data[:, cha1:cha2], self.dt, 0.01,0.1,1,2)
-    #     self.logger.info(f"bp filter: fmin: {fmin}, f")
 
     def signalTrace(self, trace):
         idx = np.abs(self.profile_X - trace).argmin()
-        data = self.data[:, idx]
+        data = self.process_data[:, idx]
 
         delta = self.dt
         npts = len(data) 
@@ -507,38 +287,6 @@ class DAS():
         yf = fft.fft(data)
 
         return t, data, np.abs(xf), np.abs(yf)
-
-    # # TODO: CC Data get Up
-    # def getUpCC(self, up) -> None:
-    #     """get up cross-correlation"""
-    #     self.bool_upcc = up
-
-    # def getDownCC(self, down) -> None:
-    #     """get down cross-correlation"""
-    #     self.bool_downcc = down
-
-    # def selfGetDispersion(self, cmin=10., cmax=1000.0, dc=5., fmin=4.0, fmax=18.0, df=0.1, bool_all=False):
-    #     if bool_all:
-    #         selfcc = self.ccAll
-    #     else:
-    #         selfcc = self.cc
-        
-    #     if self.bool_downcc:
-    #         nt, nx = selfcc.shape
-    #         cc = selfcc[:nt//2, :]
-    #     elif self.bool_upcc:
-    #         nt, nx = selfcc.shape
-    #         cc = selfcc[nt//2:, :]
-    #     else:
-    #         cc = selfcc
-
-    #     f, c, img, U, t = get_dispersion(cc, self.dx, self.dt, 
-    #                                          cmin, cmax, dc, fmin, fmax, df)
-        
-    #     for i in range(img.shape[1]):
-    #         img[:,i] /= np.max(img[:,i])
-        
-    #     return f, c, img**2, U, t
 
 
 
@@ -575,56 +323,6 @@ class DAS():
         # return the normalized data
         return data_norm
 
-    def spectrum(self, taper=0.05, nfft='default'):
-        """
-        Computes the spectrum of the given data.
-
-        :param taper: Decimal percentage of Tukey taper.
-        :param nfft: Number of points for FFT. None = sampling points, 'default'
-            = next power of 2 of sampling points.
-        :return: Spectrum and frequency sequence.
-        """
-        return spectrum(self.data, self.fs, taper=taper, nfft=nfft)
-
-    def spectrogram(self, **kwargs):
-        """
-        Computes the spectrogram of the given data.
-
-        :param xmin, xmax: int. Start channel and end channel for calculating
-            the average spectrogram.
-        :param nperseg: int. Length of each segment.
-        :param noverlap: int. Number of points to overlap between segments. If
-            None, noverlap = nperseg // 2.
-        :param nfft: int. Length of the FFT used. None = nperseg.
-        :param detrend : str or bool. Specifies whether and how to detrend each
-            segment.  'linear' or 'detrend' or True = detrend, 'constant' or
-            'demean' = demean.
-        :param boundary: str or None. Specifies whether the input signal is
-            extended at both ends, and how to generate the new values, in order
-            to center the first windowed segment on the first input point. This
-            has the benefit of enabling reconstruction of the first input point
-            when the employed window function starts at zero. Valid options are
-            ['even', 'odd', 'constant', 'zeros', None].
-        :return: Spectrogram, frequency sequence and time sequence.
-        """
-        xmin, xmax = self.dt, self.dt
-
-        return spectrogram(self.data[xmin:xmax], self.fs, **kwargs)
-
-    def fk_transform(self, **kwargs):
-        """
-        Transform the data to the fk domain using 2-D Fourier transform method
-
-        :param taper: float or sequence of floats. Each float means decimal
-            percentage of Tukey taper for corresponding dimension (ranging from
-            0 to 1). Default is 0.1 which tapers 5% from the beginning and 5%
-            from the end.
-        :param nfft: Number of points for FFT. None means sampling points;
-            'default' means next power of 2 of sampling points, which makes
-            result smoother.
-        """
-        return fk_transform(self.data, self.dx, self.fs, **kwargs)
-
 
 
 
@@ -640,16 +338,16 @@ class DAS():
     #
     #-----------------------------------------------------------
 
-    def imshowData(self, ax, indexTime=0, colormap='rainbow'):
+    def imshowData(self, ax, indexTime=0, colormap='rainbow', downsample=1):
         """"imshow raw data by indexTime and scale"""
         dt         = self.dt
         display_nt = self.display_T / self.dt
         indexTime  = int(indexTime / dt / 100)
-        data       = self.data[int(indexTime): int(indexTime+display_nt)]
+        data       = self.process_data[int(indexTime): int(indexTime+display_nt)]
         self.logger.debug(f"dt: {dt}")
         self.colormap = colormap
 
-        ax.imshow(data[::100], 
+        ax.imshow(data[::int(downsample)], 
                 aspect = 'auto',
                 origin = 'lower',
                 cmap = colormap,
@@ -667,7 +365,7 @@ class DAS():
     def saveFig(self, colormap='rainbow') -> None:
         fig = plt.figure()
         ax = fig.add_axes([0,0,1,1])
-        ax.imshow(self.data, 
+        ax.imshow(self.process_data, 
                 aspect = 'auto',
                 # origin = 'lower',
                 cmap = colormap,
@@ -689,7 +387,7 @@ class DAS():
 
     def imshowDataAll(self, ax):
         """"imshow all raw data in one figure"""
-        data       = self.data
+        data       = self.process_data
         dt         = self.dt
         nt         = self.nt
         self.logger.debug(f"dt: {dt}")
@@ -717,7 +415,7 @@ class DAS():
         dx    = self.dx
         Nt    = self.nt
         Nch   = self.profile_X.shape[0]
-        data  = self.data
+        data  = self.process_data
 
         # x = np.linspace(0, Nch * dx, Nch)        # x-axis
         x = self.profile_X
@@ -780,86 +478,6 @@ class DAS():
 
         return ax
 
-    # def imshowCC(self, ax, bool_all=False):
-        
-    #     if bool_all:
-    #         cc = self.ccAll
-    #     else:
-    #         cc = self.cc
-
-    #     cha1 = self.profile_X[self.dispersion_cha1]
-    #     cha2 = self.profile_X[self.dispersion_cha2]
-    #     # nt   = self.pre_dispersion_data.shape[0]
-    #     nt = self.cc.shape[0]
-
-    #     ax0 = ax.imshow(cc, cmap='RdBu_r', aspect='auto', interpolation='none',
-    #               origin='lower', extent=[cha1, cha2, -nt//2*self.dt, nt//2*self.dt])
-
-    #     ax.set_xlabel('distance (m)')
-    #     ax.set_ylabel('time (s)')
-    #     # ax.set_title('Cross-correlation')
-    #     # fig.colorbar(ax0, ax=ax)
-    #     self.logger.info("ImShow Cross-correlation Done!")
-    #     return ax
-
-
-    # def imshowDispersion(self, ax, cmin, cmax, dc, fmin, fmax, df, bool_all=False):
-    #     f, c, img, U, t = self.selfGetDispersion(cmin, cmax, dc, fmin, fmax, df, bool_all)
-    #     if bool_all:
-    #         self.dispersionAll = img
-    #         self.f = f
-    #         self.c = c
-        
-    #     bar2 = ax.imshow(img,aspect='auto',origin='lower',extent=(f[0],f[-1],c[0],c[-1]), 
-    #             cmap='jet', interpolation='quadric')
-
-    #     ax.grid(linestyle='--',linewidth=2)
-    #     ax.set_xlabel('Frequency (Hz)', fontsize=14)
-    #     ax.set_ylabel('Phase velocity (m/s)', fontsize=14)
-    #     # ax.tick_params(axis = 'both', which = 'major', labelsize = 14)
-    #     # ax.tick_params(axis = 'both', which = 'minor', labelsize = 14)
-
-
-
-
-    # def imshowRadon(self, ax, indexTime=0, scale=1):
-    #     # scale = 1. / scale
-    #     data = self.radon_data
-    #     nt, nx = data.shape
-        
-    #     fmin  = self.radon_parse['fmin']
-    #     fmin1 = self.radon_parse['fmin1']
-    #     fmax  = self.radon_parse['fmax']
-    #     fmax1 = self.radon_parse['fmax1']
-    #     Vmin  = self.radon_parse['Vmin']
-    #     Vmax  = self.radon_parse['Vmax']
-    #     dv    = self.radon_parse['dv']
-    #     df    = self.radon_parse['df']
-    #     dt    = self.dt
-    #     dx    = self.dx
-    #     cha1  = self.radon_parse['cha1']
-    #     cha2  = self.radon_parse['cha2']
-
-    #     ml = Radon(data, dx, dt, Vmin, Vmax, dv, fmin, fmax, df)
-
-    #     mn   = np.sum(ml, axis=1)
-    #     mn   = mn / mn.std()
-    #     inxm = np.argmax(mn)
-    #     vv   = (np.arange(Vmin, Vmax + dv, dv)) * 3.6
-
-    #     vmin = np.nanmin(ml)
-    #     vmax = np.nanmax(ml)
-    #     ax0 = ax.imshow(ml, cmap='RdBu_r', aspect='auto', 
-    #               origin='lower', extent=[fmin, fmax, Vmin*3.6, Vmax*3.6],
-    #               vmin=-vmin, vmax=vmax)
-        
-    #     ax.set_xlabel('Frequency (Hz)')
-    #     ax.set_ylabel('Velocity (km/h)')
-    #     ax.set_title(f'Car Velocity: {vv[inxm]:2f} km/h')
-    #     # fig.colorbar(ax0, ax=ax)
-    #     self.logger.info("ImShow Radon Done!")
-
-    #     return ax
 
 
     #@nb.jit(nopython=False)
@@ -869,7 +487,7 @@ class DAS():
         dx = self.dx
         display_nt = self.display_T / self.dt
 
-        data = self.data[int(indexTime): int(indexTime+display_nt)]
+        data = self.process_data[int(indexTime): int(indexTime+display_nt)]
 
         # data = data / np.nanmax(data, axis=0)
         # nan_max = np.nanmax(data, axis=0)

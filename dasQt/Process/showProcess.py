@@ -30,7 +30,7 @@ from .caculateProcess import CaculateProcess
 
 
 class ProcessMainWindow(QMainWindow):
-    def __init__(self, MyProgram, title="COG"):
+    def __init__(self, MyProgram, title="PreProcess"):
         super().__init__()
 
         self.is_closed           : bool = False
